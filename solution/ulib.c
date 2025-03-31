@@ -104,3 +104,11 @@ memmove(void *vdst, const void *vsrc, int n)
     *dst++ = *src++;
   return vdst;
 }
+
+int thread_create(void (*fn)(void *), void *arg) {
+  return -1;
+}
+
+int thread_join() {
+  return -1;
+}
