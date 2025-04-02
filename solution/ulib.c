@@ -109,12 +109,19 @@ memmove(void *vdst, const void *vsrc, int n)
 int
 thread_create(void (*fn)(void *), void *arg)
 {
-  void *stack = malloc(4096);
-  if(stack == 0)
+  void *mem = malloc(4096 * 2);
+  if(mem == 0)
     return -1;
   
+  char *p = (char *)mem;
+  while ((uint)p % 4096 != 0) {
+    p++;
+  }
+
+  void *stack = (void *)p;
   // Check for page alignment.
   if(((uint)stack % 4096) != 0){
+    printf(1, "LOLOLOL %p\n", fn);
     free(stack);
     return -1;
   }
@@ -125,7 +132,10 @@ thread_create(void (*fn)(void *), void *arg)
     return -1;
   }
   
+
   if(tid == 0){
+    printf(1, "Entering thread function at %p\n", fn);
+
     // In the child thread: call the thread function.
     fn(arg);
     // When the thread function returns, free the stack and exit.

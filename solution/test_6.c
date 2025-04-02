@@ -35,6 +35,10 @@ main(int argc, char* argv[])
 
     thread_join();
     thread_join();
+    
+    printf(1, "shared: %d\n", shared);
+    printf(1, "i: %d\n", i);
+    printf(1, "j: %d\n", j);
 
     ASSERT(i == 0, "this thread should get the lock, and execute first (%d)", i);
     ASSERT(j == 1, "this thread should get the lock, and execute second (%d)", j);

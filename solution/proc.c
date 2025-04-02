@@ -570,7 +570,8 @@ clone(void *stack)
 
   // EBP = Extended Base Pointer, points to base of current stack.
   // updating base register
-
+  uint base_offset = curproc->tf->ebp - PGROUNDDOWN(curproc->tf->ebp);
+  np->tf->ebp = (uint)stack + base_offset;
 
   // Clear %eax so that clone returns 0 in the child.
   np->tf->eax = 0;
@@ -652,9 +653,17 @@ lock(int *lk) {
 
 int
 unlock(int *lk) {
-  acquire(&ptable.guard);
-  *lk = 0;
-  wakeup(lk);
-  release(&ptable.guard);
-  return 0;
+  while (1) {
+    acquire(&ptable.guard);
+    // lock set to 1, so unlock it
+    if (*lk == 1) {
+      *lk = 0;
+      wakeup(lk);
+      release(&ptable.guard);
+      return 0;
+    }
+    // lock set to 0
+    sleep(lk, &ptable.guard);
+    release(&ptable.guard);
+  }
 }
