@@ -3,6 +3,7 @@
 #include "fcntl.h"
 #include "user.h"
 #include "x86.h"
+#include "spinlock.h"
 
 char*
 strcpy(char *s, const char *t)
@@ -105,10 +106,39 @@ memmove(void *vdst, const void *vsrc, int n)
   return vdst;
 }
 
-int thread_create(void (*fn)(void *), void *arg) {
-  return -1;
+int
+thread_create(void (*fn)(void *), void *arg)
+{
+  void *stack = malloc(4096);
+  if(stack == 0)
+    return -1;
+  
+  // Check for page alignment.
+  if(((uint)stack % 4096) != 0){
+    free(stack);
+    return -1;
+  }
+  
+  int tid = clone(stack);
+  if(tid < 0){
+    free(stack);
+    return -1;
+  }
+  
+  if(tid == 0){
+    // In the child thread: call the thread function.
+    fn(arg);
+    // When the thread function returns, free the stack and exit.
+    free(stack);
+    exit();
+  }
+  
+  // Parent returns the new thread's id.
+  return tid;
 }
 
-int thread_join() {
-  return -1;
+int
+thread_join(void)
+{
+  return join();
 }

@@ -6,9 +6,11 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include "pthread.h"
 
 struct {
   struct spinlock lock;
+  struct spinlock guard;
   struct proc proc[NPROC];
 } ptable;
 
@@ -24,6 +26,7 @@ void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
+  initlock(&ptable.guard, "guard_lock");
 }
 
 // Must be called with interrupts disabled
@@ -536,7 +539,7 @@ procdump(void)
 int
 clone(void *stack)
 {
-  int i, tid;
+  int tid;
   struct proc *np;
   struct proc *curproc = myproc();
 
@@ -545,29 +548,34 @@ clone(void *stack)
     return -1;
   }
 
-  // Use same page directory as parent (same addr space)
+  // Use same page directory as parent (same addr space) & update metadata
   np->pgdir = curproc->pgdir;
-
-  // Copy parent thread stack to child stack
-  char *dest_ptr = (char*) stack;
-  char *source_ptr = (char*) curproc->kstack;
-  for (i = 0; i < PGSIZE; i++) {
-    dest_ptr[i] = source_ptr[i];
-  }
-
-  // update cloned thread's stack pointer & other metadata
-  np->kstack = (char*) stack;
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
+  np->stack = stack;
 
-  uint offset = (uint)curproc->tf->esp - (uint)curproc->kstack;
-  np->tf->esp = (uint)stack + offset;
+  // ESP = Extended Stack Pointer, points to the top of the current stack.
+  // calculating the offset of parent stack
+  uint stack_offset = curproc->tf->esp - PGROUNDDOWN(curproc->tf->esp); 
+
+  // Copying parent's stack to child's stack
+  char *src_ptr = (char*) PGROUNDDOWN(curproc->tf->esp);
+  char *dst_ptr = (char*) stack;
+  for (int i = 0; i < PGSIZE; i++) {
+    dst_ptr[i] = src_ptr[i];
+  }
+  // updating child threads pointer
+  np->tf->esp = (uint)stack + stack_offset; 
+
+  // EBP = Extended Base Pointer, points to base of current stack.
+  // updating base register
+
 
   // Clear %eax so that clone returns 0 in the child.
   np->tf->eax = 0;
 
-  for(i = 0; i < NOFILE; i++)
+  for(int i = 0; i < NOFILE; i++)
     if(curproc->ofile[i])
       np->ofile[i] = filedup(curproc->ofile[i]);
 
@@ -579,7 +587,7 @@ clone(void *stack)
   acquire(&ptable.lock);
   np->state = RUNNABLE;
   release(&ptable.lock);
-
+  
   return tid;
 }
 
@@ -603,7 +611,6 @@ join(void)
       havekids = 1;
       if (p->state == ZOMBIE) {
         tid = p->pid;
-        kfree(p->kstack);
         p->kstack = 0;
         p->pid = 0;
         p->parent = 0;
@@ -627,15 +634,27 @@ join(void)
 }
 
 int
-lock(int *l)
-{
-  return 0;
+lock(int *lk) {
+  while (1) {
+    // lock not in use, acquire lock
+    acquire(&ptable.guard);
+    if (*lk == 0) {
+      *lk = 1;
+      wakeup(lk);
+      release(&ptable.guard);
+      return 0;
+    }
+    // lock in use
+    sleep(lk, &ptable.guard);
+    release(&ptable.guard);
+  }
 }
 
 int
-unlock(int *l)
-{
+unlock(int *lk) {
+  acquire(&ptable.guard);
+  *lk = 0;
+  wakeup(lk);
+  release(&ptable.guard);
   return 0;
 }
-
-

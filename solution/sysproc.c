@@ -103,25 +103,25 @@ sys_clone(void)
 int
 sys_lock(void)
 {
-  int l;
+  int *l;
 
-  if (argptr(0, (char**)&l, sizeof(int)) < 0) {
+  if (argptr(0, (char**)&l, sizeof(*l)) < 0) {
     return -1;
   }
 
-  return lock(&l);
+  return lock(l);
 }
 
 int 
 sys_unlock(void)
 {
-  int l;
+  int *l;
 
-  if (argptr(0, (char**)&l, sizeof(int)) < 0) {
+  if (argptr(0, (char**)&l, sizeof(*l)) < 0) {
     return -1;
   }
 
-  return unlock(&l);
+  return unlock(l);
 }
 
 int
